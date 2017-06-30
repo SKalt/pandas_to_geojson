@@ -1,6 +1,7 @@
 "Functions to extract geojson from pandas.DataFrames"
 import pandas as pd
 import geojson
+import pdb
 
 def to_list(pd_series):
     "Shorthand: Coerce a pd.Series to a list of its elements"
@@ -16,19 +17,22 @@ def make_position(df, lat, lon):
     Returns:
         a pandas.Series of [lat, lon].
     """
-    return df.apply(lambda row: to_list(pd.concat([row[lat], row[lon]])))
+    return df.apply(lambda row: pd.concat([row[lat], row[lon]]).tolist())
 
 def group_coordinates(hdf):
     """
     Heirarchically group coordinate [lat, lon] pairs into nested lists
     Args:
-        hdf: a pandas.DataFrame with a hierarchical MultiIndex
+        hdf: a pandas.DataFrame or .Series with a hierarchical MultiIndex
     returns:
         a pandas.Series of nested lists. Note the index will be feature ids.
     """
+    if 'levels' not in dir(hdf.index):
+        return hdf
     levels = [i for i in range(len(hdf.index.levels))]
     aggregator = hdf
-    for i in range(len(levels), 0, -1):
+    for i in range(len(levels) -1, 0, -1):
+        print(levels[:i])
         aggregator = aggregator.groupby(level=levels[:i]).apply(to_list)
     return aggregator
 
@@ -47,6 +51,7 @@ def df_to_geojson(pd_df, lat, lon, geometry_type, aggregation_ids=[]):
     Returns:
         a geojson FeatureCollection of Features
     """
+    print(aggregation_ids)
     if aggregation_ids:
         if not isinstance(aggregation_ids, list):
             aggregation_ids = [aggregation_ids]
