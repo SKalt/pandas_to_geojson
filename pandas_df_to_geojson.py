@@ -1,4 +1,4 @@
-
+"Functions to extract geojson from pandas.DataFrames"
 import pandas as pd
 import geojson
 
