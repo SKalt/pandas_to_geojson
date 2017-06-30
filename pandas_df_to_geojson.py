@@ -1,34 +1,70 @@
-"Coerce a pd.Series to a list of its elements"
-to_list = lambda pd_series: pd_series.tolist()
 
-def make_point(df, lat, lon):
-    "Extract a pd.Series of [lat, lon] lists from a DataFrame df"
+import pandas as pd
+import geojson
+
+def to_list(pd_series):
+    "Shorthand: Coerce a pd.Series to a list of its elements"
+    return pd_series.tolist()
+
+def make_position(df, lat, lon):
+    """
+    Extract a pd.Series of [lat, lon] lists from a DataFrame df
+    Args:
+        df: a pandas.DataFrame
+        lat: a str column name in df representing latitude
+        lon: a str column name in df representing longitude
+    Returns:
+        a pandas.Series of [lat, lon].
+    """
     return df.apply(lambda row: to_list(pd.concat([row[lat], row[lon]])))
 
-def group_heirarchical(hdf):
+def group_coordinates(hdf):
+    """
+    Heirarchically group coordinate [lat, lon] pairs into nested lists
+    Args:
+        hdf: a pandas.DataFrame with a hierarchical MultiIndex
+    returns:
+        a pandas.Series of nested lists. Note the index will be feature ids.
+    """
     levels = [i for i in range(len(hdf.index.levels))]
     aggregator = hdf
     for i in range(len(levels), 0, -1):
         aggregator = aggregator.groupby(level=levels[:i]).apply(to_list)
     return aggregator
 
-def df_to_geojson(df, lat, lon, geometry_type, *aggregation_ids):
+def df_to_geojson(pd_df, lat, lon, geometry_type, aggregation_ids=[]):
+    """
+    Aggregates lat, lon coordinates a pandas.DataFrame into higher geometries.
+    Args:
+        df: a pandas.DataFrame.  It may already have hierarchical index.
+        lat: a str or int column id representing latitude
+        lon: a str or int column id representing longitude
+        geometry_type: either a string geojson geometry name, or a function
+            yeilding a geojson object
+        aggregation_ids: an iterable of str or int column ids. This *must* be in
+            hierarchical order feature_id > polygon_id > interior_ring
+             | linestring_id > point_id.
+    Returns:
+        a geojson FeatureCollection of Features
+    """
     if aggregation_ids:
+        if not isinstance(aggregation_ids, list):
+            aggregation_ids = [aggregation_ids]
         # df is not hierarchical, and so must be aggregated
-        df = df.groupby(aggregation_ids)
-    coordinates = make_point(df, lat, lon) # a hierarchical pd.Series
-    coordinates = group_hierarchies(coordinates) # now a series of nested lists
-    feature_collection = {
-        'type':'FeatureCollection',
-        'features':[]
-        }
+        pd_df = pd_df.groupby(aggregation_ids)
+    coordinates = make_position(pd_df, lat, lon) # a hierarchical pd.Series
+    coordinates = group_coordinates(coordinates) # now a series of nested lists
+    feature_collection = geojson.FeatureCollection([])
     for coords in coordinates:
-        feature_collection['features'].append({
-            'type':'Feature',
-            'properties':{}, # you'll need to extract properties somehow
-            'geometry': {
+        if isinstance(geometry_type, str):
+            geometry = {
                 'type': geometry_type,
-                'coordinates': coordinates
+                'coordinates': coords
             }
-        })
+        else:
+            # assume it must be a geojson geometry factory
+            geometry = geometry_type(coords)
+        feature_collection['features'].append(
+            geojson.Feature(geometry=geometry)
+        )
     return feature_collection
