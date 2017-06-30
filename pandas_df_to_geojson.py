@@ -1,3 +1,5 @@
+import pandas as pd
+
 "Coerce a pd.Series to a list of its elements"
 to_list = lambda pd_series: pd_series.tolist()
 
